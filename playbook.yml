@@ -1,0 +1,9 @@
+---
+- name: Deploy config to Mikrotik
+  hosts: mikrotik
+  gather_facts: no
+  tasks:
+    - name: Set system identity
+      community.routeros.command:
+        commands:
+          - /system identity set name="Test-Network"
