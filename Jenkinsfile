@@ -1,10 +1,14 @@
-stage('Checkout') {
-    steps {
-        git branch: 'main',
-            credentialsId: 'github-pat',
-            url: 'https://github.com/MuhammadHaafiz/deployment-cicd.git'
-    }
-}
+pipeline {
+    agent any
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    credentialsId: 'github-pat',
+                    url: 'https://github.com/MuhammadHaafiz/deployment-cicd.git'
+            }
+        }
 
         stage('Deploy Config') {
             steps {
@@ -13,3 +17,4 @@ stage('Checkout') {
         }
     }
 }
+
