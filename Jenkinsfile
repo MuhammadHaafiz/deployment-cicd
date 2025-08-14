@@ -3,7 +3,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git 'https://github.com/<username>/deployment-ci-cd.git'
+                git 'https://github.com/MuhammadHaafiz/deployment-cicd.git'
             }
         }
         stage('Deploy Config') {
