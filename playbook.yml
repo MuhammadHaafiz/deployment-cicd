@@ -4,4 +4,3 @@
     - name: Simulasi deploy
       debug:
         msg: "Deploy config ke Mikrotik berhasil (dummy)"
-
