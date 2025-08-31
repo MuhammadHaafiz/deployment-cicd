@@ -9,48 +9,55 @@
     ip_cidr: "{{ mt_ip }}/{{ mt_prefix }}"
 
   tasks:
-    - name: Hapus IP sama yang bukan di interface target (jika ada)
-      community.routeros.routeros_command:
+    # 1) Hapus IP yg sama di interface lain (hindari bentrok)
+    - name: Hapus IP sama di interface lain (jika ada)
+      community.routeros.command:
         commands:
           - :local ip "{{ ip_cidr }}"
           - :local iface "{{ mt_iface }}"
           - /ip address remove [find where address=$ip and interface!=$iface]
-      changed_when: false
 
-    - name: Pastikan IP ada di interface target
-      community.routeros.routeros_config:
-        lines:
-          - /ip address add address={{ ip_cidr }} interface={{ mt_iface }} comment=managed-by-ansible
-        regexp: "^add address={{ mt_ip }}/{{ mt_prefix }} .*interface={{ mt_iface }}"
-        state: present
+    # 2) Tambahkan IP ke interface target hanya jika belum ada
+    - name: Pastikan IP ada di interface target (idempotent)
+      community.routeros.command:
+        commands:
+          - :local ip "{{ ip_cidr }}"
+          - :local iface "{{ mt_iface }}"
+          - /ip address
+          - :if ([:len [find where address=$ip and interface=$iface]] = 0) do={ add address=$ip interface=$iface comment=managed-by-ansible }
 
-    - name: Pastikan default route (0.0.0.0/0) ke gateway
-      community.routeros.routeros_config:
-        lines:
-          - /ip route add dst-address=0.0.0.0/0 gateway={{ mt_gateway }} distance=1 comment=managed-by-ansible
-        regexp: "^add dst-address=0\\.0\\.0\\.0/0 .*gateway={{ mt_gateway }}"
-        state: present
+    # 3) Pastikan default route 0.0.0.0/0 ke gateway yang diinginkan (idempotent)
+    - name: Pastikan default route ke gateway (idempotent)
+      community.routeros.command:
+        commands:
+          - :local gw "{{ mt_gateway }}"
+          - /ip route
+          - :if ([:len [find where dst-address="0.0.0.0/0" and gateway=$gw]] = 0) do={ add dst-address=0.0.0.0/0 gateway=$gw distance=1 comment=managed-by-ansible }
 
+    # 4) Baca konfigurasi DNS saat ini
     - name: Baca konfigurasi DNS saat ini
-      community.routeros.routeros_command:
+      community.routeros.command:
         commands:
           - /ip dns print terse
       register: dns_now
 
+    # 5) Set DNS hanya bila berbeda (idempotent)
     - name: Set DNS servers hanya jika berbeda
       when: >
         (mt_dns | join(",")) not in (dns_now.stdout | join("\n")) or
         ((mt_allow_dns_remote|default(false)) and "allow-remote-requests=yes" not in (dns_now.stdout | join("\n"))) or
         (not (mt_allow_dns_remote|default(false)) and "allow-remote-requests=no" not in (dns_now.stdout | join("\n")))
-      community.routeros.routeros_command:
+      community.routeros.command:
         commands:
           - /ip dns set servers={{ mt_dns | join(",") }} allow-remote-requests={{ 'yes' if mt_allow_dns_remote else 'no' }}
 
-    - name: Cek IP yang terpasang di interface target
-      community.routeros.routeros_command:
+    # 6) Validasi ringkas
+    - name: Cek IP di interface target
+      community.routeros.command:
         commands:
           - /ip address print terse where interface={{ mt_iface }}
       register: iplist
 
     - debug:
         var: iplist.stdout_lines
+
