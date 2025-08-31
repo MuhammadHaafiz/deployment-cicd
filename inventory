@@ -1,4 +1,19 @@
 [mikrotik]
-localhost ansible_connection=local
+router1 ansible_host=10.10.10.1 ansible_port=22
+
+[mikrotik:vars]
+ansible_connection=network_cli
+ansible_network_os=community.routeros.routeros
+ansible_user=admin
+ansible_password=haafiz
+
+# Target konfigurasi IP (bukan WG, tapi interface LAN)
+mt_iface=ether17
+mt_ip=10.0.137.222
+mt_prefix=24
+mt_gateway=10.0.137.1
+mt_dns=["8.8.8.8","1.1.1.1"]
+mt_allow_dns_remote=false
+
 
 

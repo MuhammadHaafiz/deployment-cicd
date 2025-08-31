@@ -1,6 +1,63 @@
-- hosts: mikrotik
+---
+- name: Set IP / Gateway / DNS di MikroTik
+  hosts: mikrotik
   gather_facts: no
+  collections:
+    - community.routeros
+
+  vars:
+    ip_cidr: "{{ mt_ip }}/{{ mt_prefix }}"
+
   tasks:
-    - name: Simulasi deploy
-      debug:
-        msg: "Deploy config ke Mikrotik berhasil (dummy)"
+    # Hapus IP sama yang mungkin ada di interface lain
+    - name: Hapus IP sama yang bukan di interface target (jika ada)
+      routeros_command:
+        commands:
+          - :local ip "{{ ip_cidr }}"
+          - :local iface "{{ mt_iface }}"
+          - /ip address remove [find where address=$ip and interface!=$iface]
+      changed_when: false
+
+    # Tambahkan IP ke interface target bila belum ada
+    - name: Pastikan IP ada di interface target
+      routeros_config:
+        lines:
+          - /ip address add address={{ ip_cidr }} interface={{ mt_iface }} comment=managed-by-ansible
+        regexp: "^add address={{ mt_ip }}/{{ mt_prefix }} .*interface={{ mt_iface }}"
+        state: present
+
+    # Pastikan default route ada dan sesuai
+    - name: Pastikan default route (0.0.0.0/0) ke gateway
+      routeros_config:
+        lines:
+          - /ip route add dst-address=0.0.0.0/0 gateway={{ mt_gateway }} distance=1 comment=managed-by-ansible
+        regexp: "^add dst-address=0\\.0\\.0\\.0/0 .*gateway={{ mt_gateway }}"
+        state: present
+
+    # Baca DNS sekarang
+    - name: Baca konfigurasi DNS saat ini
+      routeros_command:
+        commands:
+          - /ip dns print terse
+      register: dns_now
+
+    # Set DNS hanya jika berbeda
+    - name: Set DNS servers hanya jika berbeda
+      when: >
+        (mt_dns | join(",")) not in (dns_now.stdout | join("\n")) or
+        ((mt_allow_dns_remote|default(false)) and "allow-remote-requests=yes" not in (dns_now.stdout | join("\n"))) or
+        (not (mt_allow_dns_remote|default(false)) and "allow-remote-requests=no" not in (dns_now.stdout | join("\n")))
+      routeros_command:
+        commands:
+          - /ip dns set servers={{ mt_dns | join(",") }} allow-remote-requests={{ 'yes' if mt_allow_dns_remote else 'no' }}
+
+    # Validasi ringkas
+    - name: Cek IP yang terpasang di interface target
+      routeros_command:
+        commands:
+          - /ip address print terse where interface={{ mt_iface }}
+      register: iplist
+
+    - debug:
+        var: iplist.stdout_lines
+
